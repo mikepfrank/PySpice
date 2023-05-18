@@ -240,7 +240,7 @@ class RawFileAbc:
         else:
             label = line[:-1]
         if label != expected_label:
-            raise NameError("Expected label %s instead of %s" % (expected_label, label))
+            raise NameError("Expected label [%s] instead of [%s]" % (expected_label, label))
         if has_value:
             return value.strip()
 
@@ -273,9 +273,12 @@ class RawFileAbc:
         for i in range(self.number_of_variables):
             line = (next(header_line_iterator)).decode('utf-8')
             self._logger.debug(line)
-            items = [x.strip() for x in line.split('\t') if x]
+            items = [x.strip() for x in line.split() if x]
+            #print(f"items: {items}")  # Add this line to debug
             # 0 frequency frequency grid=3
             index, name, unit = items[:3]
+            #  unit = S, V, A
+            unit = {'S': 'time', 'V': 'voltage', 'A': 'current'}[unit]
             #  unit = time, voltage, current
             unit = self._name_to_unit[unit] # convert to Unit
             self.variables[name] = self._variable_cls(index, name, unit)
@@ -290,20 +293,42 @@ class RawFileAbc:
         if self.flags == 'real':
             number_of_columns = self.number_of_variables
         elif self.flags == 'complex':
-            number_of_columns = 2*self.number_of_variables
+            raise NotImplementedError("Complex number handling is not implemented yet.")
         else:
             raise NotImplementedError
 
-        input_data = np.fromstring(raw_data, count=number_of_columns*self.number_of_points, dtype='f8')
-        input_data = input_data.reshape((self.number_of_points, number_of_columns))
-        input_data = input_data.transpose()
-        # np.savetxt('raw.txt', input_data)
-        if self.flags == 'complex':
-            raw_data = input_data
-            input_data = np.array(raw_data[0::2], dtype='complex128')
-            input_data.imag = raw_data[1::2]
-        for variable in self.variables.values():
-            variable.data = input_data[variable.index]
+        lines = raw_data.decode("utf-8").splitlines()[1:]  # Skip the 'Values:' line
+
+        data = [[] for _ in range(number_of_columns)]
+        current_variable_index = 0
+
+        for line in lines:
+            items = [float(x) for x in line.split('\t') if x]  # Split on tab character instead of space; don't filter "".
+            #items = [float(x) for x in line.split() if x]
+            #print(f"Now assigning vector element #{len(data[current_variable_index])} of variable #{current_variable_index}")
+            data[current_variable_index].append(items[0] if len(items) == 1 else items[1])  # Handle cases where there's no vector index
+            current_variable_index = (current_variable_index + 1) % number_of_columns
+
+        for variable_name, variable in self.variables.items():
+            variable.data = np.array(data[variable.index])
+
+        # if self.flags == 'real':
+        #     number_of_columns = self.number_of_variables
+        # elif self.flags == 'complex':
+        #     number_of_columns = 2*self.number_of_variables
+        # else:
+        #     raise NotImplementedError
+
+        # input_data = np.fromstring(raw_data, count=number_of_columns*self.number_of_points, dtype='f8')
+        # input_data = input_data.reshape((self.number_of_points, number_of_columns))
+        # input_data = input_data.transpose()
+        # # np.savetxt('raw.txt', input_data)
+        # if self.flags == 'complex':
+        #     raw_data = input_data
+        #     input_data = np.array(raw_data[0::2], dtype='complex128')
+        #     input_data.imag = raw_data[1::2]
+        # for variable in self.variables.values():
+        #     variable.data = input_data[variable.index]
 
     ##############################################
 

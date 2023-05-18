@@ -127,17 +127,18 @@ class RawFile(RawFileAbc):
 
         """ Parse the header """
 
-        # see https://github.com/FabriceSalvaire/PySpice/issues/132
-        #   Xyce open the file in binary mode and print using: os << "Binary:" << std::endl;
-        #   endl is thus \n
-        binary_line = b'Binary:\n'
-        binary_location = output.find(binary_line)
-        if binary_location < 0:
-            raise NameError('Cannot locate binary data')
-        raw_data_start = binary_location + len(binary_line)
+        # Locate the "Variables:" line in the output
+        values_line = b'\nValues:'
+        values_location = output.find(values_line)
+        if values_location < 0:
+            raise NameError('Cannot locate Variables line')
+        header_lines = output[:values_location].splitlines()
+
+        #print("header_lines is:")
+        #print(str(header_lines))
+
+        raw_data_start = values_location + len(values_line) + 1  # +1 to include the newline character
         self._logger.debug(os.linesep + output[:raw_data_start].decode('utf-8'))
-        header_lines = output[:binary_location].splitlines()
-        raw_data = output[raw_data_start:]
         header_line_iterator = iter(header_lines)
 
         self.title = self._read_header_field_line(header_line_iterator, 'Title')
@@ -146,10 +147,38 @@ class RawFile(RawFileAbc):
         self.flags = self._read_header_field_line(header_line_iterator, 'Flags')
         self.number_of_variables = int(self._read_header_field_line(header_line_iterator, 'No. Variables'))
         self.number_of_points = int(self._read_header_field_line(header_line_iterator, 'No. Points'))
+        self._read_header_field_line(header_line_iterator, 'Command')
+
+        # Process the 'Variables:' line
         self._read_header_field_line(header_line_iterator, 'Variables')
+        #next(header_line_iterator)
         self._read_header_variables(header_line_iterator)
 
-        return raw_data
+        return output[raw_data_start:]
+
+        # # see https://github.com/FabriceSalvaire/PySpice/issues/132
+        # #   Xyce open the file in binary mode and print using: os << "Binary:" << std::endl;
+        # #   endl is thus \n
+        # binary_line = b'Binary:\n'
+        # binary_location = output.find(binary_line)
+        # if binary_location < 0:
+        #     raise NameError('Cannot locate binary data')
+        # raw_data_start = binary_location + len(binary_line)
+        # self._logger.debug(os.linesep + output[:raw_data_start].decode('utf-8'))
+        # header_lines = output[:binary_location].splitlines()
+        # raw_data = output[raw_data_start:]
+        # header_line_iterator = iter(header_lines)
+
+        # self.title = self._read_header_field_line(header_line_iterator, 'Title')
+        # self.date = self._read_header_field_line(header_line_iterator, 'Date')
+        # self.plot_name = self._read_header_field_line(header_line_iterator, 'Plotname')
+        # self.flags = self._read_header_field_line(header_line_iterator, 'Flags')
+        # self.number_of_variables = int(self._read_header_field_line(header_line_iterator, 'No. Variables'))
+        # self.number_of_points = int(self._read_header_field_line(header_line_iterator, 'No. Points'))
+        # self._read_header_field_line(header_line_iterator, 'Variables')
+        # self._read_header_variables(header_line_iterator)
+
+        # return raw_data
 
     ##############################################
 
